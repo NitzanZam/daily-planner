@@ -1,60 +1,25 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { SLOT, SLOT_H, slotsOf, fixedForDay, minToHHMM } from "./settings.js";
 
 /* ============================================================
-   ההגדרות של ההורה — כל מה שצריך לשנות נמצא כאן
+   מסך הילד. כל החוקים מגיעים מ-settings שההורה קובע —
+   כאן לא נשאר שום דבר מקובע לשינוי.
    ============================================================ */
 
-const DAY_START = 14 * 60;   // תחילת הציר (14:00)
-const DAY_END = 20 * 60;     // סוף הציר (20:00)
-const SLOT = 15;             // רזולוציה בדקות
-const SLOT_H = 27;           // גובה רבע שעה בפיקסלים
-const SLOTS = (DAY_END - DAY_START) / SLOT;
-
-const SCREEN_BUDGET = 4;     // תקציב מסך ברבעי שעה (4 = שעה)
-
-// בלוקים נעולים — הילד רואה אותם אבל לא יכול להזיז.
-// ניתן לתת לכל בלוק days: [0..6] (0 = ראשון) כדי שיופיע רק בימים מסוימים.
-const FIXED = [
-  { id: "lunch",  icon: "🍝", label: "צהריים", start: "14:00", end: "14:45" },
-  { id: "ball",   icon: "⚽", label: "כדורגל", start: "16:00", end: "17:00", days: [1, 3] },
-  { id: "dinner", icon: "🍽️", label: "ערב",    start: "18:30", end: "19:00" },
-  { id: "bath",   icon: "🛁", label: "מקלחת",  start: "19:15", end: "20:00" },
-];
-
-// מלאי הפעילויות שהילד משבץ
-const ACTIVITIES = [
-  { id: "hw",     icon: "📚", label: "שיעורים", color: "#c9791a", min: 2, must: true, single: true },
-  { id: "screen", icon: "📺", label: "מסך",     color: "#6c4bb6", min: 2, screen: true, after: "hw" },
-  { id: "out",    icon: "🚲", label: "בחוץ",    color: "#4a7c2f", min: 2 },
-  { id: "lego",   icon: "🧱", label: "לגו",     color: "#2b6cb0", min: 2 },
-  { id: "draw",   icon: "🎨", label: "ציור",    color: "#b3325c", min: 2 },
-  { id: "read",   icon: "📖", label: "קריאה",   color: "#0f8a7e", min: 2 },
-  { id: "guitar", icon: "🎸", label: "גיטרה",   color: "#8a6a2f", min: 2 },
-  { id: "friend", icon: "🧒", label: "חבר",     color: "#c2410c", min: 4 },
-];
-
-const MAX_LEN = 8; // אורך מקסימלי לפעילות (שעתיים)
-
-/* ============================================================ */
-
-const toSlot = (hhmm) => {
-  const [h, m] = hhmm.split(":").map(Number);
-  return (h * 60 + m - DAY_START) / SLOT;
-};
-const slotLabel = (s) => {
-  const t = DAY_START + s * SLOT;
-  return `${String(Math.floor(t / 60)).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
-};
-const act = (id) => ACTIVITIES.find((a) => a.id === id);
 const overlaps = (aS, aL, bS, bL) => aS < bS + bL && bS < aS + aL;
-
 const C = { ink: "#17233f", inkSoft: "#22315a", paper: "#fff6e6", stamp: "#7c6a52" };
 
-export default function DayPlanner() {
-  const today = new Date();
-  const fixed = FIXED
-    .filter((f) => !f.days || f.days.includes(today.getDay()))
-    .map((f) => ({ ...f, s: toSlot(f.start), len: toSlot(f.end) - toSlot(f.start) }));
+const MAX_STARS = 8; // מעבר לזה מציגים מספר במקום שורת כוכבים
+
+export default function DayPlanner({ settings, onOpenParent }) {
+  const today = useMemo(() => new Date(), []);
+  const SLOTS = slotsOf(settings);
+  const { screenBudget, maxLen, activities } = settings;
+
+  const act = useCallback((id) => activities.find((a) => a.id === id), [activities]);
+  const slotLabel = (s) => minToHHMM(settings.dayStart + s * SLOT);
+
+  const fixed = useMemo(() => fixedForDay(settings, today.getDay()), [settings, today]);
 
   const validate = useCallback((list) => {
     for (let i = 0; i < list.length; i++) {
@@ -71,14 +36,29 @@ export default function DayPlanner() {
       if (a.after && !list.some((q) => q.actId === a.after && q.start + q.len <= p.start)) return false;
     }
     const screenUsed = list.filter((p) => act(p.actId)?.screen).reduce((n, p) => n + p.len, 0);
-    return screenUsed <= SCREEN_BUDGET;
-  }, [fixed]);
+    return screenUsed <= screenBudget;
+  }, [fixed, act, SLOTS, screenBudget]);
+
+  /* תוכנית ששמורה מלפני שההורה שינה הגדרות יכולה להיות לא חוקית.
+     במקום להציג משהו שבור, שומרים בסדר כרונולוגי כל מה שעוד מסתדר. */
+  const reconcile = useCallback((list) => {
+    const keep = [];
+    for (const p of [...list].sort((x, y) => x.start - y.start)) {
+      const a = act(p.actId);
+      if (!a) continue;
+      const len = Math.max(a.min, Math.min(maxLen, p.len));
+      const fit = { ...p, len };
+      if (validate([...keep, fit])) keep.push(fit);
+    }
+    return keep;
+  }, [act, maxLen, validate]);
 
   const [placements, setPlacements] = useState([]);
   const [dragView, setDragView] = useState(null);
   const [selected, setSelected] = useState(null);
   const [shake, setShake] = useState(0);
   const [done, setDone] = useState(false);
+  const [trimmed, setTrimmed] = useState(false);
 
   const dragRef = useRef(null);
   const stripRef = useRef(null);
@@ -103,6 +83,17 @@ export default function DayPlanner() {
     if (isDone !== done) setDone(isDone);
     try { localStorage.setItem(key, JSON.stringify({ placements: list, done: isDone })); } catch (e) {}
   };
+
+  /* התאמה מחדש אחרי שינוי הגדרות — או אחרי טעינה של תוכנית ישנה */
+  useEffect(() => {
+    const next = reconcile(placeRef.current);
+    if (JSON.stringify(next) === JSON.stringify(placeRef.current)) return;
+    setTrimmed(true);
+    setPlacements(next);
+    const stillDone = done && next.length > 0;
+    if (stillDone !== done) setDone(stillDone);
+    try { localStorage.setItem(key, JSON.stringify({ placements: next, done: stillDone })); } catch (e) {}
+  }, [reconcile, key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const buzz = (ms) => { try { navigator.vibrate?.(ms); } catch (e) {} };
 
@@ -170,13 +161,13 @@ export default function DayPlanner() {
       window.removeEventListener("pointerup", up);
       window.removeEventListener("pointercancel", up);
     };
-  }, [dragView, done, validate]);
+  }, [dragView, done, validate, SLOTS]);
 
   /* ---------- עריכה ---------- */
   const resize = (uid, delta) => {
     const p = placements.find((x) => x.uid === uid);
     const a = act(p.actId);
-    const len = Math.max(a.min, Math.min(MAX_LEN, p.len + delta));
+    const len = Math.max(a.min, Math.min(maxLen, p.len + delta));
     if (len === p.len) return;
     const next = placements.map((x) => (x.uid === uid ? { ...x, len } : x));
     if (validate(next)) { commit(next); buzz(10); } else { setShake((n) => n + 1); buzz(70); }
@@ -185,8 +176,9 @@ export default function DayPlanner() {
 
   /* ---------- נגזרות ---------- */
   const screenUsed = placements.filter((p) => act(p.actId)?.screen).reduce((n, p) => n + p.len, 0);
-  const mustLeft = ACTIVITIES.filter((a) => a.must && !placements.some((p) => p.actId === a.id));
+  const mustLeft = activities.filter((a) => a.must && !placements.some((p) => p.actId === a.id));
   const canFinish = mustLeft.length === 0 && placements.length > 0;
+  const hasScreenAct = activities.some((a) => a.screen);
   const hasRoom = (a) => {
     for (let s = 0; s <= SLOTS - a.min; s++) {
       if (validate([...placements, { uid: "tmp", actId: a.id, start: s, len: a.min }])) return true;
@@ -211,18 +203,26 @@ export default function DayPlanner() {
         button { font-family: inherit; }
       `}</style>
 
-      {/* כותרת: תקציב מסך, חובות, סיום */}
+      {/* כותרת: תקציב מסך, חובות, סיום, וכפתור ההורה */}
       <div className="row" style={{ justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
         <div className="row" style={{ gap: 8 }}>
-          <span style={{ fontSize: 24 }}>📺</span>
-          <div className="row" style={{ gap: 4 }}>
-            {Array.from({ length: SCREEN_BUDGET }).map((_, i) => (
-              <span key={i} style={{
-                fontSize: 22, opacity: i < screenUsed ? 1 : 0.28,
-                filter: i < screenUsed ? "none" : "grayscale(1)",
-              }}>⭐</span>
-            ))}
-          </div>
+          {hasScreenAct && screenBudget > 0 && (
+            <>
+              <span style={{ fontSize: 24 }}>📺</span>
+              {screenBudget <= MAX_STARS ? (
+                <div className="row" style={{ gap: 4 }}>
+                  {Array.from({ length: screenBudget }).map((_, i) => (
+                    <span key={i} style={{
+                      fontSize: 22, opacity: i < screenUsed ? 1 : 0.28,
+                      filter: i < screenUsed ? "none" : "grayscale(1)",
+                    }}>⭐</span>
+                  ))}
+                </div>
+              ) : (
+                <span style={{ fontSize: 18 }}>⭐ {screenUsed}/{screenBudget}</span>
+              )}
+            </>
+          )}
         </div>
         <div className="row" style={{ gap: 10 }}>
           {mustLeft.map((a) => (
@@ -242,8 +242,25 @@ export default function DayPlanner() {
               borderRadius: 999, padding: "8px 18px", fontSize: 16,
             }}>✏️ לשנות</button>
           )}
+          <button onClick={onOpenParent} title="הגדרות הורה" aria-label="הגדרות הורה" style={{
+            background: "transparent", border: "none", color: C.paper,
+            fontSize: 20, opacity: 0.45, padding: 4, cursor: "pointer",
+          }}>⚙️</button>
         </div>
       </div>
+
+      {trimmed && (
+        <div className="row" style={{
+          gap: 8, marginBottom: 12, fontSize: 14, background: "rgba(201,121,26,.18)",
+          border: "1px solid rgba(201,121,26,.5)", borderRadius: 12, padding: "8px 12px",
+        }}>
+          <span>ℹ️</span>
+          <span style={{ flex: 1 }}>ההגדרות התעדכנו, אז כמה בלוקים ירדו מהתוכנית</span>
+          <button onClick={() => setTrimmed(false)} style={{
+            background: "transparent", border: "none", color: C.paper, fontSize: 16, cursor: "pointer",
+          }}>✕</button>
+        </div>
+      )}
 
       <div className="board">
         {/* ---------- הציר ---------- */}
@@ -333,7 +350,7 @@ export default function DayPlanner() {
         {/* ---------- השלף ---------- */}
         <div style={{ flex: "1 1 auto", minWidth: 240, alignSelf: "stretch" }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(102px, 1fr))", gap: 10 }}>
-            {ACTIVITIES.map((a) => {
+            {activities.map((a) => {
               const room = !done && hasRoom(a);
               const blockedBy = a.after && !placements.some((p) => p.actId === a.after);
               return (
@@ -347,12 +364,12 @@ export default function DayPlanner() {
                   }}>
                   <div style={{ fontSize: 38, lineHeight: 1 }}>{a.icon}</div>
                   <div style={{ fontSize: 15, color: "#fff", marginTop: 6 }}>{a.label}</div>
-                  {a.screen && (
+                  {a.screen && screenBudget > 0 && (
                     <div style={{ position: "absolute", top: 4, left: 6, fontSize: 13 }}>
-                      ⭐{Math.max(0, SCREEN_BUDGET - screenUsed)}
+                      ⭐{Math.max(0, screenBudget - screenUsed)}
                     </div>
                   )}
-                  {blockedBy && !done && (
+                  {blockedBy && !done && act(a.after) && (
                     <div style={{ position: "absolute", top: 4, right: 6, fontSize: 15 }}>{act(a.after).icon}</div>
                   )}
                 </div>
@@ -366,7 +383,7 @@ export default function DayPlanner() {
       </div>
 
       {/* רוח רפאים של הגרירה */}
-      {dragView && (
+      {dragView && act(dragView.actId) && (
         <div style={{
           position: "fixed", top: dragView.y - dragView.dy, left: dragView.x - dragView.dx,
           width: dragView.w, height: dragView.len * SLOT_H - 3, pointerEvents: "none", zIndex: 50,
@@ -390,6 +407,11 @@ export default function DayPlanner() {
             background: C.paper, color: C.ink, border: "none",
             borderRadius: 999, padding: "12px 26px", fontSize: 18,
           }}>✏️ לשנות משהו</button>
+          {/* גם כשהתוכנית נעולה ההורה צריך דרך להיכנס להגדרות */}
+          <button onClick={onOpenParent} aria-label="הגדרות הורה" style={{
+            background: "transparent", border: "none", color: C.paper,
+            fontSize: 20, opacity: 0.3, marginTop: 8, cursor: "pointer",
+          }}>⚙️</button>
         </div>
       )}
     </div>
