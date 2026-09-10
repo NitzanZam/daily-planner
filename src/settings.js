@@ -4,8 +4,18 @@
    שהוא מגיע למסך הילד, כדי שהגדרה שבורה לא תפיל אותו.
    ============================================================ */
 
-export const SLOT = 15;   // רזולוציה בדקות
-export const SLOT_H = 27; // גובה רבע שעה בפיקסלים
+export const SLOT = 10;         // רזולוציה בדקות
+export const SLOT_H = 18;       // גובה משבצת בפיקסלים
+export const PER_HOUR = 60 / SLOT; // כמה משבצות נכנסות בשעה
+
+/* תיאור משך בעברית — משבצות הן יחידה פנימית, ההורה חושב בדקות */
+export const durLabel = (slots) => {
+  const m = slots * SLOT;
+  if (m < 60) return `${m} דק׳`;
+  const h = Math.floor(m / 60), r = m % 60;
+  if (r) return `${h} ש׳ ${r} דק׳`;
+  return h === 1 ? "שעה" : `${h} שעות`;
+};
 
 export const STORE_KEY = "planner:settings:v1";
 
@@ -16,23 +26,23 @@ export const DEFAULTS = {
   pin: null,              // נקבע בכניסה הראשונה למסך ההורה
   dayStart: 14 * 60,
   dayEnd: 20 * 60,
-  screenBudget: 4,        // ברבעי שעה (4 = שעה)
-  maxLen: 8,              // אורך מקסימלי לפעילות (8 = שעתיים)
+  screenBudget: 6,        // במשבצות (6 = שעה)
+  maxLen: 12,             // אורך מקסימלי לפעילות (12 = שעתיים)
   fixed: [
-    { id: "lunch",  icon: "🍝", label: "צהריים", start: "14:00", end: "14:45" },
+    { id: "lunch",  icon: "🍝", label: "צהריים", start: "14:00", end: "14:40" },
     { id: "ball",   icon: "⚽", label: "כדורגל", start: "16:00", end: "17:00", days: [1, 3] },
     { id: "dinner", icon: "🍽️", label: "ערב",    start: "18:30", end: "19:00" },
-    { id: "bath",   icon: "🛁", label: "מקלחת",  start: "19:15", end: "20:00" },
+    { id: "bath",   icon: "🛁", label: "מקלחת",  start: "19:20", end: "20:00" },
   ],
   activities: [
-    { id: "hw",     icon: "📚", label: "שיעורים", color: "#c9791a", min: 2, must: true, single: true },
-    { id: "screen", icon: "📺", label: "מסך",     color: "#6c4bb6", min: 2, screen: true, after: "hw" },
-    { id: "out",    icon: "🚲", label: "בחוץ",    color: "#4a7c2f", min: 2 },
-    { id: "lego",   icon: "🧱", label: "לגו",     color: "#2b6cb0", min: 2 },
-    { id: "draw",   icon: "🎨", label: "ציור",    color: "#b3325c", min: 2 },
-    { id: "read",   icon: "📖", label: "קריאה",   color: "#0f8a7e", min: 2 },
-    { id: "guitar", icon: "🎸", label: "גיטרה",   color: "#8a6a2f", min: 2 },
-    { id: "friend", icon: "🧒", label: "חבר",     color: "#c2410c", min: 4 },
+    { id: "hw",     icon: "📚", label: "שיעורים", color: "#c9791a", min: 3, must: true, single: true },
+    { id: "screen", icon: "📺", label: "מסך",     color: "#6c4bb6", min: 3, screen: true, after: "hw" },
+    { id: "out",    icon: "🚲", label: "בחוץ",    color: "#4a7c2f", min: 3 },
+    { id: "lego",   icon: "🧱", label: "לגו",     color: "#2b6cb0", min: 3 },
+    { id: "draw",   icon: "🎨", label: "ציור",    color: "#b3325c", min: 3 },
+    { id: "read",   icon: "📖", label: "קריאה",   color: "#0f8a7e", min: 3 },
+    { id: "guitar", icon: "🎸", label: "גיטרה",   color: "#8a6a2f", min: 3 },
+    { id: "friend", icon: "🧒", label: "חבר",     color: "#c2410c", min: 6 },
   ],
 };
 
@@ -95,7 +105,7 @@ export function sanitize(raw) {
 
   const pin = /^\d{4}$/.test(String(src.pin || "")) ? String(src.pin) : null;
 
-  /* בלוקים קבועים: חייבים ליפול בתוך היום, על רבעי שעה,
+  /* בלוקים קבועים: חייבים ליפול בתוך היום, על רשת המשבצות,
      ובלי לדרוך אחד על השני באותו יום בשבוע. */
   const fixedIds = new Set();
   const fixed = [];
@@ -141,7 +151,7 @@ export function sanitize(raw) {
       icon: cleanText(a.icon, "⭐", 8),
       label: cleanText(a.label, "פעילות"),
       color: isHex(a.color) ? a.color : "#4a7c2f",
-      min: clampInt(a.min, 1, maxLen, 2),
+      min: clampInt(a.min, 1, maxLen, 3),
       must: !!a.must,
       single: !!a.single,
       screen: !!a.screen,

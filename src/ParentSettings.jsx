@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import {
-  DEFAULTS, DAY_NAMES, SLOT, minToHHMM, hhmmToMin, snap, slotsOf, sanitize,
+  DEFAULTS, DAY_NAMES, SLOT, PER_HOUR, durLabel, minToHHMM, hhmmToMin, snap, slotsOf, sanitize,
 } from "./settings.js";
 
 /* ============================================================
@@ -141,17 +141,17 @@ export default function ParentSettings({ settings, onSave, onClose, onChangePin 
                 <option key={h} value={h} disabled={h * 60 <= d.dayStart}>{minToHHMM(h * 60)}</option>
               ))}
             </select>
-            <span style={{ fontSize: 13, opacity: 0.6 }}>{slots} רבעי שעה</span>
+            <span style={{ fontSize: 13, opacity: 0.6 }}>{durLabel(slots)}</span>
           </div>
         </Section>
 
         {/* ---------- כללים ---------- */}
-        <Section title="כללים" hint="ברבעי שעה — 4 הם שעה">
+        <Section title="כללים" hint={`ביחידות של ${SLOT} דקות — ${PER_HOUR} הן שעה`}>
           <div className="pRow" style={{ gap: 18 }}>
             <Stepper label="תקציב מסך" value={d.screenBudget} min={0} max={slots}
-              onChange={(v) => patch("screenBudget", v)} />
+              onChange={(v) => patch("screenBudget", v)} suffix={durLabel(d.screenBudget)} />
             <Stepper label="אורך מקסימלי לפעילות" value={d.maxLen} min={1} max={slots}
-              onChange={(v) => patch("maxLen", v)} />
+              onChange={(v) => patch("maxLen", v)} suffix={durLabel(d.maxLen)} />
           </div>
         </Section>
 
@@ -218,7 +218,7 @@ export default function ParentSettings({ settings, onSave, onClose, onChangePin 
               </div>
               <div className="pRow" style={{ marginTop: 10, gap: 16 }}>
                 <Stepper label="אורך התחלתי" value={a.min} min={1} max={d.maxLen}
-                  onChange={(v) => patchAct(i, "min", v)} />
+                  onChange={(v) => patchAct(i, "min", v)} suffix={durLabel(a.min)} />
                 <Check label="חובה" checked={!!a.must} onChange={(v) => patchAct(i, "must", v)} />
                 <Check label="פעם ביום" checked={!!a.single} onChange={(v) => patchAct(i, "single", v)} />
                 <Check label="נחשב מסך" checked={!!a.screen} onChange={(v) => patchAct(i, "screen", v)} />
@@ -266,7 +266,7 @@ function Section({ title, hint, children }) {
   );
 }
 
-function Stepper({ label, value, min, max, onChange }) {
+function Stepper({ label, value, min, max, onChange, suffix }) {
   const step = (delta) => onChange(Math.max(min, Math.min(max, value + delta)));
   return (
     <div className="pRow" style={{ gap: 6 }}>
@@ -274,6 +274,7 @@ function Stepper({ label, value, min, max, onChange }) {
       <button className="pBtn" style={{ padding: "4px 12px" }} onClick={() => step(-1)} disabled={value <= min}>－</button>
       <span style={{ minWidth: 22, textAlign: "center", fontSize: 16 }}>{value}</span>
       <button className="pBtn" style={{ padding: "4px 12px" }} onClick={() => step(1)} disabled={value >= max}>＋</button>
+      {suffix && <span style={{ fontSize: 13, opacity: 0.55, minWidth: 62 }}>{suffix}</span>}
     </div>
   );
 }
@@ -332,7 +333,7 @@ function ColorPick({ value, onChange }) {
   );
 }
 
-/* בורר זמן ברבעי שעה בתוך גבולות היום */
+/* בורר זמן על רשת המשבצות, בתוך גבולות היום */
 function TimePick({ value, min, max, onChange }) {
   const opts = [];
   for (let t = snap(min); t <= max; t += SLOT) opts.push(t);

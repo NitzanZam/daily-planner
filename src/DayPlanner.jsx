@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { SLOT, SLOT_H, slotsOf, fixedForDay, minToHHMM } from "./settings.js";
+import { SLOT, SLOT_H, PER_HOUR, slotsOf, fixedForDay, minToHHMM } from "./settings.js";
 
 /* ============================================================
    מסך הילד. כל החוקים מגיעים מ-settings שההורה קובע —
@@ -9,7 +9,7 @@ import { SLOT, SLOT_H, slotsOf, fixedForDay, minToHHMM } from "./settings.js";
 const overlaps = (aS, aL, bS, bL) => aS < bS + bL && bS < aS + aL;
 const C = { ink: "#17233f", inkSoft: "#22315a", paper: "#fff6e6", stamp: "#7c6a52" };
 
-const MAX_STARS = 8; // מעבר לזה מציגים מספר במקום שורת כוכבים
+const MAX_STARS = 12; // מעבר לזה מציגים מספר במקום שורת כוכבים (12 = שעתיים)
 
 export default function DayPlanner({ settings, onOpenParent }) {
   const today = useMemo(() => new Date(), []);
@@ -66,7 +66,7 @@ export default function DayPlanner({ settings, onOpenParent }) {
   placeRef.current = placements;
 
   /* ---------- שמירה מקומית על המכשיר ---------- */
-  const key = "plan:" + today.toISOString().slice(0, 10);
+  const key = "plan10:" + today.toISOString().slice(0, 10);
   useEffect(() => {
     try {
       const raw = localStorage.getItem(key);
@@ -266,8 +266,10 @@ export default function DayPlanner({ settings, onOpenParent }) {
         {/* ---------- הציר ---------- */}
         <div className="row" style={{ gap: 8, alignItems: "flex-start", flex: "0 0 auto" }}>
           <div style={{ width: 42, position: "relative", height: SLOTS * SLOT_H, fontSize: 12, opacity: 0.55 }}>
-            {Array.from({ length: SLOTS / 4 + 1 }).map((_, i) => (
-              <div key={i} style={{ position: "absolute", top: i * 4 * SLOT_H - 7, right: 0 }}>{slotLabel(i * 4)}</div>
+            {Array.from({ length: SLOTS / PER_HOUR + 1 }).map((_, i) => (
+              <div key={i} style={{ position: "absolute", top: i * PER_HOUR * SLOT_H - 7, right: 0 }}>
+                {slotLabel(i * PER_HOUR)}
+              </div>
             ))}
           </div>
 
@@ -281,9 +283,9 @@ export default function DayPlanner({ settings, onOpenParent }) {
               boxShadow: "inset 0 0 0 2px rgba(255,255,255,.25)", overflow: "hidden", flex: "0 0 auto",
             }}
           >
-            {Array.from({ length: SLOTS / 4 }).map((_, i) => (
+            {Array.from({ length: SLOTS / PER_HOUR }).map((_, i) => (
               <div key={i} style={{
-                position: "absolute", top: (i + 1) * 4 * SLOT_H, left: 0, right: 0,
+                position: "absolute", top: (i + 1) * PER_HOUR * SLOT_H, left: 0, right: 0,
                 height: 1, background: "rgba(255,255,255,.35)",
               }} />
             ))}
